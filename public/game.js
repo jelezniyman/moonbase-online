@@ -13,14 +13,12 @@ const chatMessages = document.getElementById('chatMessages');
 const moonRadius = 450; 
 let cx, cy; 
 let isMobile = false;
-let camScale = 1; // Коэффициент масштаба камеры
+let camScale = 1; 
 
-// Если мы на телефоне, показываем предупреждение в меню
 if (window.innerWidth < 768) {
     document.getElementById('mobileWarning').style.display = 'block';
 }
 
-// РЕЙТИНГ С ИМЕНАМИ
 let currentScore = 0;
 let defaultTop = [
     {name: 'Джефф Безос', score: 5000}, {name: 'Илон Маск', score: 4500},
@@ -58,16 +56,14 @@ const player = {
 };
 
 const otherPlayers = {};
-
 const GRAVITY = 0.15; const JUMP_FORCE = 6; const MOVE_SPEED = 0.0035; const FRICTION = 0.85;
 const keys = { left: false, right: false, up: false };
 
-// ДЖОЙСТИК
-let joystick = { active: false, id: null, originX: 0, originY: 0, x: 0, y: 0 };
+// ПОСТОЯННЫЙ ДЖОЙСТИК (с фиксированными координатами)
+let joystick = { active: false, id: null, originX: 120, originY: 0, x: 120, y: 0 };
 
 let stars = [];
 const surfaceCraters = [ { r: 40, dist: 150, angle: Math.PI / 4 }, { r: 25, dist: 280, angle: Math.PI / 1.2 }, { r: 70, dist: 120, angle: -Math.PI / 2.5 }, { r: 20, dist: 380, angle: Math.PI / 1.5 }, { r: 45, dist: 220, angle: -Math.PI / 6 }, { r: 30, dist: 350, angle: Math.PI / 3 } ];
-// ТЕПЕРЬ 5 РОВЕРОВ НА ЛУНЕ
 const rovers = [ 
     { angle: Math.PI/3, speed: 0.002, dir: 1 }, { angle: -Math.PI/6, speed: 0.0015, dir: -1 },
     { angle: Math.PI/4, speed: 0.0018, dir: 1 }, { angle: -Math.PI/2, speed: 0.0025, dir: -1 },
@@ -78,7 +74,6 @@ const giantRocket = { x: 0, y: 0, width: 1120, height: 168, speed: 1.2, splats: 
 const projectiles = [];
 const particles = [];
 
-// СЕТЬ
 socket.on('currentPlayers', (players) => { Object.keys(players).forEach(id => { if (id !== socket.id) otherPlayers[id] = players[id]; }); });
 socket.on('newPlayer', (playerData) => { otherPlayers[playerData.id] = playerData; });
 socket.on('playerMoved', (playerData) => { if (otherPlayers[playerData.id]) Object.assign(otherPlayers[playerData.id], playerData); });
@@ -94,8 +89,7 @@ setInterval(() => {
     if (loginScreen.style.display === 'none') {
         socket.emit('playerMovement', { 
             angle: player.angle, distance: player.distance, animTime: player.animTime, 
-            direction: player.direction, onGround: player.onGround,
-            score: currentScore // ПЕРЕДАЕМ НАШ СЧЕТ ОСТАЛЬНЫМ
+            direction: player.direction, onGround: player.onGround, score: currentScore 
         });
     }
 }, 50);
@@ -104,7 +98,6 @@ function shootAction(clientX, clientY) {
     if (document.activeElement === chatInput || loginScreen.style.display !== 'none') return;
     const rect = canvas.getBoundingClientRect();
     
-    // Переводим клики в правильную систему координат с учетом масштабирования камеры
     let mouseX = (clientX - rect.left) / camScale;
     let mouseY = (clientY - rect.top) / camScale;
 
@@ -122,7 +115,6 @@ function shootAction(clientX, clientY) {
     socket.emit('shoot', proj); 
 }
 
-// УПРАВЛЕНИЕ МЫШЬЮ И КЛАВИАТУРОЙ
 canvas.addEventListener('mousedown', (e) => shootAction(e.clientX, e.clientY));
 
 window.addEventListener('keydown', (e) => {
@@ -140,19 +132,25 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => { if (e.code === 'KeyA' || e.code === 'ArrowLeft') keys.left = false; if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.right = false; if (e.code === 'Space' || e.code === 'ArrowUp') keys.up = false; });
 
-// ВИРТУАЛЬНЫЙ ДЖОЙСТИК ДЛЯ МОБИЛЬНЫХ (Левая половина экрана - джойстик, правая - выстрел)
+// ОБНОВЛЕННАЯ ЛОГИКА ТАЧЕЙ (Стик слева, стрельба в любом другом месте)
 canvas.addEventListener('touchstart', (e) => {
     if (loginScreen.style.display !== 'none') return;
     e.preventDefault();
     for(let i=0; i<e.changedTouches.length; i++) {
         let touch = e.changedTouches[i];
-        if (touch.clientX < window.innerWidth / 2 && !joystick.active) {
+        
+        // Проверяем, нажал ли игрок рядом с центром джойстика
+        let distToJoy = Math.hypot(touch.clientX - joystick.originX, touch.clientY - joystick.originY);
+        
+        // Если тап близко к джойстику (радиус 150px) и он еще не активен - берем стик
+        if (distToJoy < 150 && !joystick.active) {
             joystick.active = true;
             joystick.id = touch.identifier;
-            joystick.originX = touch.clientX; joystick.originY = touch.clientY;
             joystick.x = touch.clientX; joystick.y = touch.clientY;
-        } else if (touch.clientX >= window.innerWidth / 2) {
-            shootAction(touch.clientX, touch.clientY); // Стрельба при тапе по правой части
+            updateJoyKeys();
+        } else {
+            // Если тапнули в ЛЮБОЕ ДРУГОЕ место экрана - стреляем
+            shootAction(touch.clientX, touch.clientY); 
         }
     }
 }, {passive: false});
@@ -162,22 +160,37 @@ canvas.addEventListener('touchmove', (e) => {
     for(let i=0; i<e.changedTouches.length; i++) {
         let touch = e.changedTouches[i];
         if (joystick.active && touch.identifier === joystick.id) {
-            joystick.x = touch.clientX; joystick.y = touch.clientY;
-            let dx = joystick.x - joystick.originX;
-            let dy = joystick.y - joystick.originY;
-            keys.left = dx < -20;
-            keys.right = dx > 20;
-            keys.up = dy < -30; // Прыжок при свайпе вверх по стику
+            let dx = touch.clientX - joystick.originX;
+            let dy = touch.clientY - joystick.originY;
+            let dist = Math.hypot(dx, dy);
+            let maxDist = 50; // Максимальное отклонение стика
+            
+            if (dist > maxDist) {
+                joystick.x = joystick.originX + (dx / dist) * maxDist;
+                joystick.y = joystick.originY + (dy / dist) * maxDist;
+            } else {
+                joystick.x = touch.clientX; joystick.y = touch.clientY;
+            }
+            updateJoyKeys();
         }
     }
 }, {passive: false});
+
+function updateJoyKeys() {
+    let dx = joystick.x - joystick.originX;
+    let dy = joystick.y - joystick.originY;
+    keys.left = dx < -15;
+    keys.right = dx > 15;
+    keys.up = dy < -25;
+}
 
 const handleTouchEnd = (e) => {
     e.preventDefault();
     for(let i=0; i<e.changedTouches.length; i++) {
         let touch = e.changedTouches[i];
         if (joystick.active && touch.identifier === joystick.id) {
-            joystick.active = false;
+            joystick.active = false; joystick.id = null;
+            joystick.x = joystick.originX; joystick.y = joystick.originY; // Возврат стика
             keys.left = false; keys.right = false; keys.up = false;
         }
     }
@@ -190,23 +203,21 @@ joinBtn.addEventListener('click', () => {
     player.color = colorInput.value;
     player.headStyle = selectedHelmet; 
     loginScreen.style.display = 'none'; gameContainer.style.display = 'block';
-    
     socket.emit('joinGame', {
         name: player.name, color: player.color, headStyle: player.headStyle,
         angle: player.angle, distance: player.distance, animTime: player.animTime, direction: player.direction
     });
-
     socket.emit('chatMessage', { name: 'СИСТЕМА', color: '#fff', text: `${player.name} прибыл на базу.` });
     resizeCanvas();
     requestAnimationFrame(gameLoop);
 });
 
 function updatePhysics() {
-    // Вся игровая логика использует виртуальную ширину мира с учетом масштаба (canvas.width / camScale)
     let virtualWidth = canvas.width / camScale;
-    
     stars.forEach(star => { star.x += 0.1; if (star.x > virtualWidth) star.x = -10; });
-    giantRocket.x += giantRocket.speed; if (giantRocket.x > virtualWidth) giantRocket.x -= virtualWidth;
+    
+    giantRocket.x += giantRocket.speed; 
+    if (giantRocket.x > virtualWidth) giantRocket.x -= virtualWidth;
 
     for (let i = giantRocket.splats.length - 1; i >= 0; i--) {
         giantRocket.splats[i].life -= 0.004; if (giantRocket.splats[i].life <= 0) giantRocket.splats.splice(i, 1);
@@ -260,7 +271,6 @@ function updatePhysics() {
     rovers.forEach(r => { r.angle += r.speed * r.dir; if(Math.random() < 0.005) r.dir *= -1; });
 }
 
-// ОТРИСОВКА (Исключены повторы, логика идентична, добавлены только визуальные правки для масштаба)
 function drawJointedLimbSegment(ctx, color, width, length, angleBase, angleOffset, isUpper = false) {
     ctx.save(); ctx.rotate(angleBase + angleOffset); ctx.fillStyle = color; ctx.beginPath();
     if (isUpper) { ctx.roundRect(-width * 0.5, 0, width, length + width * 0.4, width * 0.4); } else { ctx.roundRect(-width * 0.4, 0, width * 0.8, length, width * 0.3); }
@@ -285,7 +295,12 @@ function drawStandaloneFlag(cx, cy, radius, angle) {
 }
 
 function drawGiantRocket(xOffset) {
-    ctx.save(); ctx.translate(giantRocket.x + xOffset, giantRocket.y); ctx.scale(1.4, 1.4); ctx.shadowBlur = 0; 
+    ctx.save(); ctx.translate(giantRocket.x + xOffset, giantRocket.y); 
+    
+    // Адаптивный масштаб отрисовки самой ракеты
+    let rScale = isMobile ? 0.7 : 1.4;
+    ctx.scale(rScale, rScale); ctx.shadowBlur = 0; 
+    
     for(let i=0; i<3; i++) {
         let ty = 30 + i * 30; ctx.fillStyle = 'orange'; ctx.beginPath(); ctx.moveTo(0, ty-12); ctx.lineTo(-120 - Math.random()*50, ty); ctx.lineTo(0, ty+12); ctx.fill(); ctx.fillStyle = 'yellow'; ctx.beginPath(); ctx.moveTo(0, ty-6); ctx.lineTo(-60 - Math.random()*20, ty); ctx.lineTo(0, ty+6); ctx.fill(); ctx.fillStyle = '#222'; ctx.fillRect(-15, ty-15, 35, 30);
     }
@@ -316,26 +331,25 @@ function drawCharacter(charObj) {
     ctx.restore(); ctx.restore(); ctx.fillStyle = 'white'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center'; ctx.fillText(charObj.name, 0, -PLAYER_H - headRadius - 15); ctx.restore();
 }
 
-// ОБНОВЛЕННЫЙ РЕЙТИНГ (С ИМЕНАМИ)
+// УВЕЛИЧЕННЫЙ В 2 РАЗА РЕЙТИНГ
 function drawLeaderboard() {
     ctx.save(); 
     
-    // Делаем рейтинг компактнее и переносим в правый ВЕРХНИЙ угол на мобилках
-    let lbW = isMobile ? 180 : 250;
-    let lbH = isMobile ? 220 : 300;
-    let fontSize = isMobile ? 11 : 14;
-    let paddingRight = isMobile ? 15 : 25;
-    let yOffset = isMobile ? 20 : window.innerHeight - 310; 
+    // Новые, гигантские размеры таблицы
+    let lbW = isMobile ? 320 : 450;
+    let lbH = isMobile ? 380 : 500;
+    let fontSize = isMobile ? 18 : 24;
+    let paddingRight = isMobile ? 20 : 40;
+    let yOffset = isMobile ? 20 : window.innerHeight - lbH - 20; 
     
     ctx.fillStyle = "rgba(0, 0, 0, 0.6)"; ctx.beginPath(); 
-    ctx.roundRect(canvas.width - lbW - 10, yOffset, lbW, lbH, 10); ctx.fill();
+    ctx.roundRect(canvas.width - lbW - 10, yOffset, lbW, lbH, 15); ctx.fill();
     ctx.fillStyle = "#aaaaaa"; ctx.font = `bold ${fontSize}px 'Courier New', Courier, monospace`; ctx.textAlign = "right"; 
     
     let startX = canvas.width - paddingRight; 
-    let startY = yOffset + 25; 
+    let startY = yOffset + fontSize + 10; 
     ctx.fillText("РЕЙТИНГ (ТОП-13):", startX, startY);
     
-    // Собираем всех игроков в один массив и сортируем по очкам
     let allScores = [...defaultTop, {name: player.name || 'Вы', score: currentScore, isMe: true}];
     Object.values(otherPlayers).forEach(p => {
         allScores.push({name: p.name || 'Аноним', score: p.score || 0});
@@ -344,35 +358,36 @@ function drawLeaderboard() {
     let top13 = allScores.slice(0, 13);
     
     ctx.font = `${fontSize}px 'Courier New', Courier, monospace`;
+    let lineSpacing = fontSize + (isMobile ? 6 : 8);
+    
     for (let i = 0; i < 13; i++) {
         let item = top13[i];
         if (!item) break;
         
         ctx.fillStyle = item.isMe ? "#00FF00" : "white";
         let line = `${i + 1}. ${item.name}: ${item.score}`;
-        // Обрезаем длинные имена, чтобы не вылезали за рамку
-        if (line.length > (isMobile ? 22 : 28)) line = line.substring(0, isMobile ? 20 : 25) + '...';
+        // Обрезка, чтобы длинные имена не ломали UI
+        if (line.length > (isMobile ? 20 : 25)) line = line.substring(0, isMobile ? 18 : 22) + '...';
         
-        ctx.fillText(line, startX, startY + (isMobile? 14 : 20) + (i * (isMobile? 12 : 15))); 
+        ctx.fillText(line, startX, startY + lineSpacing + (i * lineSpacing)); 
     }
     
-    ctx.fillStyle = "#00FF00"; ctx.font = `bold ${fontSize + 2}px 'Courier New', Courier, monospace`; 
-    ctx.fillText(`Ваш счет: ${currentScore}`, startX, startY + (isMobile? 20 : 35) + (13 * (isMobile? 12 : 15)));
+    ctx.fillStyle = "#00FF00"; ctx.font = `bold ${fontSize + 4}px 'Courier New', Courier, monospace`; 
+    ctx.fillText(`Ваш счет: ${currentScore}`, startX, startY + (14 * lineSpacing) + (isMobile ? 5 : 10));
     ctx.restore();
 }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // ПРИМЕНЯЕМ МАСШТАБ ДЛЯ ВСЕХ ИГРОВЫХ ОБЪЕКТОВ
     ctx.save();
     ctx.scale(camScale, camScale);
 
     ctx.fillStyle = 'white'; stars.forEach(star => { star.size += star.blink; if(star.size > 2 || star.size < 0.5) star.blink *= -1; ctx.beginPath(); ctx.arc(star.x, star.y, Math.abs(star.size), 0, Math.PI*2); ctx.fill(); });
     
-    // Земля теперь жестко привязана к мировым координатам, чтобы не уезжала
+    // Земля отодвинута, чтобы не перекрывать новую отдаленную ракету
     const earthX = cx + 300; 
-    const earthY = cy - moonRadius - 150; 
+    const earthY = cy - moonRadius - 600; 
     const earthRadius = 100; 
     
     ctx.save(); ctx.shadowBlur = 40; ctx.shadowColor = 'rgba(100, 150, 255, 0.7)'; ctx.fillStyle = '#1144cc'; ctx.beginPath(); ctx.arc(earthX, earthY, earthRadius, 0, Math.PI*2); ctx.fill(); ctx.restore(); ctx.save(); ctx.beginPath(); ctx.arc(earthX, earthY, earthRadius, 0, Math.PI*2); ctx.clip(); ctx.fillStyle = '#22aa22'; ctx.beginPath(); ctx.moveTo(earthX - 70, earthY - 80); ctx.lineTo(earthX - 20, earthY - 50); ctx.lineTo(earthX - 40, earthY - 10); ctx.lineTo(earthX - 10, earthY + 40); ctx.lineTo(earthX - 30, earthY + 80); ctx.lineTo(earthX - 60, earthY + 20); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.moveTo(earthX + 20, earthY - 90); ctx.lineTo(earthX + 90, earthY - 70); ctx.lineTo(earthX + 80, earthY + 10); ctx.lineTo(earthX + 40, earthY + 20); ctx.lineTo(earthX + 50, earthY + 70); ctx.lineTo(earthX + 10, earthY + 40); ctx.lineTo(earthX + 30, earthY - 20); ctx.closePath(); ctx.fill(); ctx.restore();
@@ -393,35 +408,33 @@ function draw() {
     Object.values(otherPlayers).forEach(p => drawCharacter(p));
     drawCharacter(player); 
     
-    ctx.restore(); // КОНЕЦ МАСШТАБИРОВАНИЯ ИГРЫ
+    ctx.restore(); 
 
-    // ОТРИСОВКА ИНТЕРФЕЙСА (Без масштаба, всегда четко)
-    drawLeaderboard();
-
-    // Рисуем виртуальный джойстик, если мы коснулись экрана
-    if (joystick.active) {
+    // ПОСТОЯННО ВИДИМЫЙ СТИК ДЛЯ МОБИЛЬНЫХ УСТРОЙСТВ
+    if (isMobile && loginScreen.style.display === 'none') {
         ctx.save();
         ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
         ctx.beginPath(); ctx.arc(joystick.originX, joystick.originY, 60, 0, Math.PI*2); ctx.fill();
         ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
         ctx.beginPath(); ctx.arc(joystick.x, joystick.y, 30, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-        ctx.font = '24px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText('↕↔', joystick.originX, joystick.originY - 80);
+        
+        if (!joystick.active) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.font = '24px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText('↕↔', joystick.originX, joystick.originY - 80);
+        }
         ctx.restore();
     }
+
+    drawLeaderboard();
 }
 
-// ДИНАМИЧЕСКИЙ РЕСАЙЗ ХОЛСТА
 function resizeCanvas() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     isMobile = window.innerWidth < 768;
     
-    // Масштабируем: на мобильных камерах делаем обзор шире, чтобы влезла Земля, Луна и Ракета
     camScale = isMobile ? window.innerWidth / 900 : 1; 
-    
-    // Координаты центра с учетом масштаба (мир стал больше!)
     cx = (canvas.width / 2) / camScale;
     
     if (isMobile) {
@@ -430,10 +443,19 @@ function resizeCanvas() {
         cy = (canvas.height / 2 + 250) / camScale;
     }
 
-    // Ракета теперь всегда летит над Луной на фиксированной высоте
-    giantRocket.y = cy - moonRadius - 150;
+    // Ракета теперь в 3 раза дальше (поднята на 450px)
+    giantRocket.y = cy - moonRadius - 450;
+    
+    // Адаптивная ширина и скорость ракеты для телефонов
+    let rScale = isMobile ? 0.7 : 1.4;
+    giantRocket.width = 800 * rScale;
+    giantRocket.height = 120 * rScale;
+    giantRocket.speed = isMobile ? 0.6 : 1.2;
 
-    // Звезды раскидываем по увеличенной виртуальной площади
+    // Устанавливаем положение стика
+    joystick.originY = window.innerHeight - 120;
+    if (!joystick.active) joystick.y = joystick.originY;
+
     if (stars.length === 0) {
         stars = Array.from({length: 150}, () => ({ 
             x: Math.random() * (canvas.width / camScale), 
