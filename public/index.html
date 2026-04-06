@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Это НАША Луна! Проваливайте, капиталюги!</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="loginScreen">
+        <div class="mac-window">
+            <div class="mac-titlebar">
+                <div class="mac-btn close"></div>
+                <div class="mac-btn min"></div>
+                <div class="mac-btn max"></div>
+                <span class="mac-title">Terminal - MoonBase</span>
+            </div>
+            
+            <div class="mac-content">
+                <h1>ЭТО НАША ЛУНА!<br><span style="font-size: 16px; color: #ff5555;">Проваливайте, капиталюги!</span></h1>
+                <input type="text" id="usernameInput" placeholder="Введите позывной..." maxlength="15">
+                
+                <div class="settings-row">
+                    <label for="colorInput">Цвет скафандра:</label>
+                    <input type="color" id="colorInput" value="#0055ff">
+                </div>
+
+                <label>Модификация шлема:</label>
+                <div class="helmet-grid" id="helmetSelector">
+                    <div class="h-opt selected" data-val="dome">🧑‍🚀<br><span>Купол</span></div>
+                    <div class="h-opt" data-val="retro">🤿<br><span>Ретро</span></div>
+                    <div class="h-opt" data-val="moto">🏍️<br><span>Мото</span></div>
+                    <div class="h-opt" data-val="crown">👑<br><span>Корона</span></div>
+                    <div class="h-opt" data-val="glow">💡<br><span>Неон</span></div>
+                </div>
+
+                <label>Выбор боеприпасов:</label>
+                <div class="helmet-grid" id="weaponSelector">
+                    <div class="h-opt selected" data-val="tomato">🍅<br><span>Томат</span></div>
+                    <div class="h-opt" data-val="banana">🍌<br><span>Банан</span></div>
+                    <div class="h-opt" data-val="egg">🥚<br><span>Яйцо</span></div>
+                </div>
+                
+                <button id="joinBtn">Инициировать запуск</button>
+                
+                <div class="controls-hint">
+                    <p><b>Управление:</b></p>
+                    <p>⌨️ <b>A / D</b> — Орбитальный шаг, <b>ПРОБЕЛ</b> — Прыжок</p>
+                    <p>🎯 <b>КЛИК МЫШЬЮ</b> — Бросить снаряд в любую точку!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="gameContainer" style="display: none;">
+        <canvas id="gameCanvas"></canvas>
+        <div id="chatBox">
+            <div id="chatMessages"></div>
+            <input type="text" id="chatInput" placeholder="Запись... (Enter)">
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
