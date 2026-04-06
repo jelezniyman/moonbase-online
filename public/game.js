@@ -59,7 +59,6 @@ const otherPlayers = {};
 const GRAVITY = 0.15; const JUMP_FORCE = 6; const MOVE_SPEED = 0.0035; const FRICTION = 0.85;
 const keys = { left: false, right: false, up: false };
 
-// ПОСТОЯННЫЙ ДЖОЙСТИК (Координаты будут заданы в resizeCanvas)
 let joystick = { active: false, id: null, originX: 100, originY: 0, x: 100, y: 0 };
 
 let stars = [];
@@ -78,7 +77,15 @@ socket.on('currentPlayers', (players) => { Object.keys(players).forEach(id => { 
 socket.on('newPlayer', (playerData) => { otherPlayers[playerData.id] = playerData; });
 socket.on('playerMoved', (playerData) => { if (otherPlayers[playerData.id]) Object.assign(otherPlayers[playerData.id], playerData); });
 socket.on('playerDisconnected', (id) => { delete otherPlayers[id]; });
-socket.on('newProjectile', (p) => { projectiles.push(p); });
+
+// --- ИСПРАВЛЕНИЕ 1: ПРИЕМ ОТНОСИТЕЛЬНЫХ КООРДИНАТ СНАРЯДА ---
+socket.on('newProjectile', (p) => { 
+    // Переводим относительные координаты Луны обратно в абсолютные координаты экрана игрока
+    p.x = cx + p.relX;
+    p.y = cy + p.relY;
+    projectiles.push(p); 
+});
+
 socket.on('chatMessage', (data) => {
     const msgEl = document.createElement('div'); msgEl.className = 'chat-msg';
     msgEl.innerHTML = `<strong style="color:${data.color}">${data.name}:</strong> ${data.text}`;
@@ -94,6 +101,7 @@ setInterval(() => {
     }
 }, 50);
 
+// --- ИСПРАВЛЕНИЕ 1: ОТПРАВКА ОТНОСИТЕЛЬНЫХ КООРДИНАТ СНАРЯДА ---
 function shootAction(clientX, clientY) {
     if (document.activeElement === chatInput || loginScreen.style.display !== 'none') return;
     const rect = canvas.getBoundingClientRect();
@@ -105,14 +113,24 @@ function shootAction(clientX, clientY) {
     let py = cy + Math.sin(player.angle) * player.distance;
     let angle = Math.atan2(mouseY - py, mouseX - px);
     
+    // Вычисляем координаты старта
+    let startX = px + Math.cos(angle)*30;
+    let startY = py - 20 + Math.sin(angle)*30;
+
     let proj = { 
-        x: px + Math.cos(angle)*30, y: py - 20 + Math.sin(angle)*30, 
+        x: startX, y: startY, // Оставляем абсолютные для себя
+        relX: startX - cx, relY: startY - cy, // Отправляем относительные для сервера!
         vx: Math.cos(angle) * 18, vy: Math.sin(angle) * 18,
         type: selectedWeapon, isLocal: true 
     };
     
     projectiles.push(proj);
-    socket.emit('shoot', proj); 
+    
+    // Передаем на сервер только нужные данные (relX, relY)
+    socket.emit('shoot', {
+        relX: proj.relX, relY: proj.relY, 
+        vx: proj.vx, vy: proj.vy, type: proj.type
+    }); 
 }
 
 canvas.addEventListener('mousedown', (e) => shootAction(e.clientX, e.clientY));
@@ -137,9 +155,7 @@ canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
     for(let i=0; i<e.changedTouches.length; i++) {
         let touch = e.changedTouches[i];
-        
         let distToJoy = Math.hypot(touch.clientX - joystick.originX, touch.clientY - joystick.originY);
-        
         if (distToJoy < 150 && !joystick.active) {
             joystick.active = true;
             joystick.id = touch.identifier;
@@ -160,7 +176,6 @@ canvas.addEventListener('touchmove', (e) => {
             let dy = touch.clientY - joystick.originY;
             let dist = Math.hypot(dx, dy);
             let maxDist = 50; 
-            
             if (dist > maxDist) {
                 joystick.x = joystick.originX + (dx / dist) * maxDist;
                 joystick.y = joystick.originY + (dy / dist) * maxDist;
@@ -325,11 +340,9 @@ function drawCharacter(charObj) {
     ctx.restore(); ctx.restore(); ctx.fillStyle = 'white'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center'; ctx.fillText(charObj.name, 0, -PLAYER_H - headRadius - 15); ctx.restore();
 }
 
-// 1. АДАПТАЦИЯ РЕЙТИНГА
 function drawLeaderboard() {
     ctx.save(); 
     
-    // Для мобильных он теперь В 3 РАЗА МЕНЬШЕ, для ПК - гигантский.
     let lbW = isMobile ? 140 : 450;
     let lbH = isMobile ? 190 : 500;
     let fontSize = isMobile ? 11 : 24;
@@ -357,15 +370,11 @@ function drawLeaderboard() {
     for (let i = 0; i < 13; i++) {
         let item = top13[i];
         if (!item) break;
-        
         ctx.fillStyle = item.isMe ? "#00FF00" : "white";
         let line = `${i + 1}. ${item.name}: ${item.score}`;
-        // На смартфоне обрезаем еще сильнее, чтобы влезало
         if (line.length > (isMobile ? 16 : 25)) line = line.substring(0, isMobile ? 14 : 22) + '...';
-        
         ctx.fillText(line, startX, startY + lineSpacing + (i * lineSpacing)); 
     }
-    
     ctx.fillStyle = "#00FF00"; ctx.font = `bold ${fontSize + (isMobile ? 2 : 4)}px 'Courier New', Courier, monospace`; 
     ctx.fillText(`Счет: ${currentScore}`, startX, startY + (14 * lineSpacing) + (isMobile ? 2 : 10));
     ctx.restore();
@@ -379,9 +388,12 @@ function draw() {
 
     ctx.fillStyle = 'white'; stars.forEach(star => { star.size += star.blink; if(star.size > 2 || star.size < 0.5) star.blink *= -1; ctx.beginPath(); ctx.arc(star.x, star.y, Math.abs(star.size), 0, Math.PI*2); ctx.fill(); });
     
-    const earthX = cx + 300; 
-    const earthY = cy - moonRadius - 600; 
+    // --- ИСПРАВЛЕНИЕ 2: ОГРАНИЧЕНИЕ ВЫСОТЫ ЗЕМЛИ И РАКЕТЫ ---
+    // Вычисляем Землю так, чтобы она не улетала выше края виртуального экрана
     const earthRadius = 100; 
+    let baseEarthY = cy - moonRadius - 500;
+    const earthY = Math.max(earthRadius + 20, baseEarthY); // Земля всегда видна
+    const earthX = cx + 300; 
     
     ctx.save(); ctx.shadowBlur = 40; ctx.shadowColor = 'rgba(100, 150, 255, 0.7)'; ctx.fillStyle = '#1144cc'; ctx.beginPath(); ctx.arc(earthX, earthY, earthRadius, 0, Math.PI*2); ctx.fill(); ctx.restore(); ctx.save(); ctx.beginPath(); ctx.arc(earthX, earthY, earthRadius, 0, Math.PI*2); ctx.clip(); ctx.fillStyle = '#22aa22'; ctx.beginPath(); ctx.moveTo(earthX - 70, earthY - 80); ctx.lineTo(earthX - 20, earthY - 50); ctx.lineTo(earthX - 40, earthY - 10); ctx.lineTo(earthX - 10, earthY + 40); ctx.lineTo(earthX - 30, earthY + 80); ctx.lineTo(earthX - 60, earthY + 20); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.moveTo(earthX + 20, earthY - 90); ctx.lineTo(earthX + 90, earthY - 70); ctx.lineTo(earthX + 80, earthY + 10); ctx.lineTo(earthX + 40, earthY + 20); ctx.lineTo(earthX + 50, earthY + 70); ctx.lineTo(earthX + 10, earthY + 40); ctx.lineTo(earthX + 30, earthY - 20); ctx.closePath(); ctx.fill(); ctx.restore();
     
@@ -403,22 +415,18 @@ function draw() {
     
     ctx.restore(); 
 
-    // 2. ОБНОВЛЕННЫЙ ЯРКИЙ ДЖОЙСТИК, ПОДНЯТЫЙ НАД ЧАТОМ
     if (isMobile && loginScreen.style.display === 'none') {
         ctx.save();
-        // Внешнее кольцо стика (более контрастное)
         ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
         ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(joystick.originX, joystick.originY, 60, 0, Math.PI*2); 
         ctx.fill(); ctx.stroke();
         
-        // Внутренний "палец" стика (яркий)
         ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
         ctx.beginPath(); ctx.arc(joystick.x, joystick.y, 30, 0, Math.PI*2); 
         ctx.fill();
         
-        // Индикация направлений
         if (!joystick.active) {
             ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
             ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -444,17 +452,19 @@ function resizeCanvas() {
         cy = (canvas.height / 2 + 250) / camScale;
     }
 
-    // Ракета поднята выше в 3 раза
-    giantRocket.y = cy - moonRadius - 450;
+    // --- ИСПРАВЛЕНИЕ 2: ОГРАНИЧЕНИЕ ВЫСОТЫ РАКЕТЫ ---
+    // Math.max гарантирует, что центр ракеты никогда не поднимется выше 100 пикселей
+    // от верхнего края экрана, даже на супершироких мониторах
+    let baseRocketY = cy - moonRadius - 350;
+    giantRocket.y = Math.max(100, baseRocketY);
     
     let rScale = isMobile ? 0.7 : 1.4;
     giantRocket.width = 800 * rScale;
     giantRocket.height = 120 * rScale;
     giantRocket.speed = isMobile ? 0.6 : 1.2;
 
-    // Джойстик поднят выше, чтобы не перекрываться чатом, который находится снизу
     joystick.originY = window.innerHeight - 190; 
-    joystick.originX = 100; // Немного отодвинут от левого края
+    joystick.originX = 100; 
     if (!joystick.active) joystick.y = joystick.originY;
 
     if (stars.length === 0) {
