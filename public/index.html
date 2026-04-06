@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Это НАША Луна! Проваливайте, капиталюги!</title>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -45,8 +45,8 @@
                 
                 <div class="controls-hint">
                     <p><b>Управление:</b></p>
-                    <p>⌨️ <b>A / D</b> — Орбитальный шаг, <b>ПРОБЕЛ</b> — Прыжок</p>
-                    <p>🎯 <b>КЛИК МЫШЬЮ</b> — Бросить снаряд в любую точку!</p>
+                    <p>⌨️ <b>A / D</b> — Шаг, <b>ПРОБЕЛ</b> — Прыжок</p>
+                    <p>🎯 <b>КЛИК / ТАП</b> — Бросок снаряда!</p>
                 </div>
             </div>
         </div>
@@ -54,9 +54,16 @@
 
     <div id="gameContainer" style="display: none;">
         <canvas id="gameCanvas"></canvas>
+        
+        <div id="mobileControls">
+            <button id="btnLeft">◀</button>
+            <button id="btnJump">▲</button>
+            <button id="btnRight">▶</button>
+        </div>
+
         <div id="chatBox">
             <div id="chatMessages"></div>
-            <input type="text" id="chatInput" placeholder="Запись... (Enter)">
+            <input type="text" id="chatInput" placeholder="Чат... (Enter)">
         </div>
     </div>
 
