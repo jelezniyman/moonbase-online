@@ -18,6 +18,11 @@
             
             <div class="mac-content">
                 <h1>ЭТО НАША ЛУНА!<br><span style="font-size: 16px; color: #ff5555;">Проваливайте, капиталюги!</span></h1>
+                
+                <div id="mobileWarning" style="display:none; color: #ffeb3b; font-size: 13px; font-weight: bold; margin-bottom: 15px; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+                    ⚠️ Внимание: для идеального опыта в эту игру лучше играть с ПК (но стик для телефона мы выдадим!)
+                </div>
+
                 <input type="text" id="usernameInput" placeholder="Введите позывной..." maxlength="15">
                 
                 <div class="settings-row">
@@ -44,9 +49,8 @@
                 <button id="joinBtn">Инициировать запуск</button>
                 
                 <div class="controls-hint">
-                    <p><b>Управление:</b></p>
-                    <p>⌨️ <b>A / D</b> — Шаг, <b>ПРОБЕЛ</b> — Прыжок</p>
-                    <p>🎯 <b>КЛИК / ТАП</b> — Бросок снаряда!</p>
+                    <p><b>Управление ПК:</b> ⌨️ <b>A / D</b> + <b>ПРОБЕЛ</b> | 🎯 <b>КЛИК</b> - Бросок</p>
+                    <p><b>Управление Смартфон:</b> Левая половина экрана — Стик хода/прыжка, Правая половина экрана — Тап для стрельбы.</p>
                 </div>
             </div>
         </div>
@@ -54,13 +58,6 @@
 
     <div id="gameContainer" style="display: none;">
         <canvas id="gameCanvas"></canvas>
-        
-        <div id="mobileControls">
-            <button id="btnLeft">◀</button>
-            <button id="btnJump">▲</button>
-            <button id="btnRight">▶</button>
-        </div>
-
         <div id="chatBox">
             <div id="chatMessages"></div>
             <input type="text" id="chatInput" placeholder="Чат... (Enter)">
